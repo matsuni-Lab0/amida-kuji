@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Project A: もにゅの鼻腔大冒険</title>
+    <style>
+        body { background: #fdf5e6; display: flex; flex-direction: column; align-items: center; font-family: 'Hiragino Kaku Gothic ProN', sans-serif; }
+        canvas { background: #fff; border: 6px solid #8b4513; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .info { margin: 15px; text-align: center; background: white; padding: 10px 20px; border-radius: 20px; border: 2px solid #8b4513; width: 360px; }
+        #status { font-weight: bold; font-size: 1.1em; height: 1.5em; color: #333; }
+        .hint { font-size: 0.8em; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>もにゅの鼻腔大冒険</h1>
+    <div class="info">
+        <div id="level-display">レベル: --</div>
+        <div id="status">ターゲットを確認して放流！</div>
+        <div class="hint">縦線の上の「●」を狙ってタップ！</div>
+    </div>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const statusText = document.getElementById('status');
+const levelText = document.getElementById('level-display');
+
+const lineCount = 5;
+const xGap = canvas.width / (lineCount + 1);
+const yTop = 100;
+const yBottom = 520;
+const clickRadius = 25; // ★クリック判定の広さ
+let level = 1;
+let isMoving = false;
+let horizontalLines = [];
+
+let monyu = { x: 0, y: 0, currentLine: 0, speed: 2.5 };
+let goalX = 0;
+let goalSpeed = 0.4;
+let targetPart = "鼻";
+
+function generateLines() {
+    horizontalLines = [];
+    const stepY = 40;
+    let y = yTop + 50;
+    let connected = new Array(lineCount).fill(false);
+
+    while (y < yBottom - 60) {
+        let lineIdx = Math.floor(Math.random() * (lineCount - 1));
+        horizontalLines.push({ from: lineIdx, y: y });
+        connected[lineIdx] = true;
+        connected[lineIdx + 1] = true;
+        y += stepY;
+    }
+
+    for (let i = 0; i < lineCount; i++) {
+        if (!connected[i]) {
+            let targetIdx = (i === lineCount - 1) ? i - 1 : i;
+            horizontalLines.push({ from: targetIdx, y: yTop + 60 + (i * 20) });
+        }
+    }
+    horizontalLines.sort((a, b) => a.y - b.y);
+}
+
+function init() {
+    generateLines();
+    goalX = canvas.width / 2;
+    
+    if (level === 1) {
+        levelText.innerText = "レベル: 初級 (固定)";
+        goalSpeed = 0; 
+        targetPart = "鼻";
+    } else if (level === 2) {
+        levelText.innerText = "レベル: 中級 (ゆったり移動)";
+        goalSpeed = 0.5; 
+        targetPart = "鼻";
+    } else {
+        const parts = ["鼻", "耳", "口"];
+        targetPart = parts[Math.floor(Math.random() * parts.length)];
+        levelText.innerText = `レベル: 上級 (ターゲット: ${targetPart})`;
+        goalSpeed = 0.8;
+    }
+    isMoving = false;
+    statusText.innerText = "ターゲット: " + targetPart;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (goalSpeed !== 0) {
+        goalX += goalSpeed;
+        if (goalX > canvas.width - xGap || goalX < xGap) goalSpeed *= -1;
+    }
+
+    // パーツ描画
+    const parts = [
+        { name: "耳", color: "#eeb4b4", x: goalX - xGap },
+        { name: "鼻", color: "#ffb6c1", x: goalX },
+        { name: "口", color: "#f08080", x: goalX + xGap }
+    ];
+
+    parts.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.roundRect(p.x - 30, yBottom, 60, 45, 10);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText(p.name, p.x - 16, yBottom + 28);
+        if (p.name === targetPart) {
+            ctx.strokeStyle = "#daa520";
+            ctx.lineWidth = 5;
+            ctx.stroke();
+        }
+    });
+
+    // あみだ線と「放流ボタン」の描画
+    ctx.strokeStyle = "#8b4513";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    for (let i = 1; i <= lineCount; i++) {
+        // 縦線
+        ctx.beginPath();
+        ctx.moveTo(i * xGap, yTop);
+        ctx.lineTo(i * xGap, yBottom);
+        ctx.stroke();
+        
+        // ★放流ボタン（頂点のポイント）
+        if (!isMoving) {
+            ctx.fillStyle = "#deb887";
+            ctx.beginPath();
+            ctx.arc(i * xGap, yTop, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#8b4513";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    }
+
+    horizontalLines.forEach(line => {
+        ctx.beginPath();
+        ctx.moveTo((line.from + 1) * xGap, line.y);
+        ctx.lineTo((line.from + 2) * xGap, line.y);
+        ctx.stroke();
+    });
+
+    // もにゅ
+    if (isMoving) {
+        ctx.fillStyle = "#00bfff";
+        ctx.beginPath();
+        ctx.arc(monyu.x, monyu.y, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(monyu.x - 4, monyu.y - 4, 4, 0, Math.PI * 2);
+        ctx.fill();
+        updateMonyu();
+    }
+    requestAnimationFrame(draw);
+}
+
+function updateMonyu() {
+    monyu.y += monyu.speed;
+    horizontalLines.forEach(line => {
+        if (Math.abs(monyu.y - line.y) < monyu.speed / 2) {
+            if (monyu.currentLine === line.from) {
+                monyu.currentLine++;
+                monyu.x = (monyu.currentLine + 1) * xGap;
+            } else if (monyu.currentLine === line.from + 1) {
+                monyu.currentLine--;
+                monyu.x = (monyu.currentLine + 1) * xGap;
+            }
+        }
+    });
+    if (monyu.y >= yBottom) {
+        isMoving = false;
+        checkWin();
+    }
+}
+
+function checkWin() {
+    const finalX = monyu.x;
+    let hitPart = "";
+    if (Math.abs(finalX - goalX) < 30) hitPart = "鼻";
+    else if (Math.abs(finalX - (goalX - xGap)) < 30) hitPart = "耳";
+    else if (Math.abs(finalX - (goalX + xGap)) < 30) hitPart = "口";
+
+    if (hitPart === targetPart) {
+        statusText.innerHTML = `<span style="color:blue">【成功】デロンッ！ ${hitPart}から出た！</span>`;
+        level++;
+        setTimeout(init, 2500);
+    } else {
+        let failPart = hitPart ? hitPart : "顔の外";
+        statusText.innerHTML = `<span style="color:red">【失敗】${failPart}に行っちゃった…</span>`;
+        setTimeout(init, 2500);
+    }
+}
+
+// ★クリック判定の修正
+canvas.addEventListener('mousedown', (e) => {
+    if (isMoving) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    // 各縦線の頂点（放流ポイント）との距離をチェック
+    for (let i = 0; i < lineCount; i++) {
+        const pointX = (i + 1) * xGap;
+        const pointY = yTop;
+        
+        // 三平方の定理でクリック位置とポイントの距離を計算
+        const dist = Math.sqrt((clickX - pointX)**2 + (clickY - pointY)**2);
+        
+        if (dist < clickRadius) {
+            monyu.currentLine = i;
+            monyu.x = pointX;
+            monyu.y = yTop;
+            isMoving = true;
+            statusText.innerText = "もにゅ、降下中...";
+            return; // 反応したらループを抜ける
+        }
+    }
+});
+
+init();
+draw();
+</script>
+</body>
+</html>
